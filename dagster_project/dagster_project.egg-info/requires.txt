@@ -1,0 +1,11 @@
+dagster
+dagster-cloud
+pandas
+sqlalchemy
+pycoingecko
+matplotlib
+psycopg2-binary
+
+[dev]
+dagster-webserver
+pytest
