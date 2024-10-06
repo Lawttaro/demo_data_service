@@ -15,11 +15,11 @@ class FeaturesManager:
 
         self.df = self.df.sort_values(by=['coin', 'date'])
         self.df['target'] = self.df.groupby('coin')['price'].shift(-1)
-
+        print(self.df.columns)  # <-- Debugging: Print columns to ensure shifts worked
         for i in range(1, 8):
             self.df[f'price_t-{i}'] = self.df.groupby('coin')['price'].shift(i)
 
-        self.df = self.df.dropna(subset=[f'price_t-{i}' for i in range(1, 8)] + ['target'])
+        self.df = self.df.dropna(subset=[f'price_t-{i}' for i in range(1, 7)] + ['target'])
 
     def add_feature_scaling(self):
         scaler = StandardScaler()

@@ -2,7 +2,7 @@ from dagster import asset, Output
 from datetime import timedelta
 import pandas as pd
 
-from .resources import get_coin_data, parse_coin_data, save_coin_data_to_db, get_coin_data_from_db
+from .resources import get_coin_data, parse_coin_data, save_coin_data_to_db, get_coin_data_from_db, save_prediction_in_db
 from .feautres import FeaturesManager
 
 @asset(
@@ -39,51 +39,67 @@ def get_data_from_db():
 
 
 @asset(io_manager_key="fs_io_manager")
-def get_model(get_data_from_db):
+def train_model(get_data_from_db):
     df = get_data_from_db
     features_manager = FeaturesManager(df)
+    
+    # Step 1: Reshape the data for prediction
     features_manager.reshape_df_for_prediction()
+    
+    # Step 2: Apply feature scaling
     features_manager.add_feature_scaling()
+    
+    # Step 3: Add time-based features
     df = features_manager.add_time_features()
+    
+    # Drop rows with missing data
     df = df.dropna()
+    
+    # Prepare the feature set X and target variable y
     X = df[[f'price_t-{i}' for i in range(1, 8)]]
     y = df['target']
+    
+    # Step 4: Train the model
     model = features_manager.lineal_regression(X, y)
+    
+    # Return the trained model
     return Output(model)
 
 
-
 @asset(io_manager_key="fs_io_manager")
-def predict_next_weekend(get_model, get_data_from_db):
-    # Step 1: Load the trained model from the 'get_model' asset
-    model = get_model
-
-    # Step 2: Load the data and prepare the features for prediction
+def generate_predictions(train_model, get_data_from_db):
+    # Step 1: Load the trained model from the previous asset
+    model = train_model
+    
+    # Step 2: Load the most recent data for prediction
     df = get_data_from_db
     features_manager = FeaturesManager(df)
-    features_manager.reshape_df_for_prediction()  # Ensure dataframe is prepared
-
-    # Step 3: Get the latest data for prediction
-    # Assuming you want to predict the next weekend based on the last 7 days of price data for each coin
+    
+    features_manager.reshape_df_for_prediction()
+    df = features_manager.df
+    
+    # Get the last 7 days of data to make predictions
     latest_data = df.sort_values(by=['coin', 'date']).groupby('coin').tail(7)
-
-    # Ensure we have the correct columns for prediction (price_t-1, price_t-2, ..., price_t-7)
+    
     X_pred = latest_data[[f'price_t-{i}' for i in range(1, 8)]]
+    
+    # Step 3: Generate predictions using the model
+    predictions = model.predict(X_pred)
+    
+    # Add predictions to the DataFrame
+    latest_data['predictions'] = predictions
+    
+    return Output(latest_data, metadata={"predicted_rows": len(latest_data)})
 
-    # Step 4: Predict the next price (for the weekend)
-    next_weekend_predictions = model.predict(X_pred)
 
-    # Step 5: Prepare the dates for next weekend (Saturday and Sunday)
-    today = pd.Timestamp.today()
-    next_saturday = today + timedelta((5 - today.weekday()) % 7)
-    next_sunday = next_saturday + timedelta(1)
-
-    # Step 6: Combine predictions with coin and date
-    predictions_df = latest_data[['coin']].copy()
-    predictions_df['predicted_price_saturday'] = next_weekend_predictions[::2]  # Even indices for Saturday
-    predictions_df['predicted_price_sunday'] = next_weekend_predictions[1::2]   # Odd indices for Sunday
-    predictions_df['predicted_date_saturday'] = next_saturday
-    predictions_df['predicted_date_sunday'] = next_sunday
-
-    # Step 7: Return the prediction dataframe (or store it, depending on your pipeline)
-    return Output(predictions_df, metadata={"predicted_saturday": next_saturday, "predicted_sunday": next_sunday})
+@asset(io_manager_key="fs_io_manager")
+def save_predictions(generate_predictions):
+    # Step 1: Load the predicted data from the previous asset
+    predicted_df = generate_predictions
+    
+    save_prediction_in_db(predicted_df) 
+    # Step 2: Save the predictions (this could be to a database, CSV, etc.)
+    # For example, saving to a CSV:
+#    predicted_df.to_csv("predicted_prices.csv", index=False)
+    
+    return Output(None, metadata={"data_saved": "predictions_table"})

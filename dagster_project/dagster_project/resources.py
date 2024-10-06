@@ -1,4 +1,5 @@
 import logging
+import json
 import pandas as pd
 from datetime import datetime, timedelta
 from pycoingecko import CoinGeckoAPI
@@ -6,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .models import CoinData, CoinMonthData
+from .models import CoinData, CoinMonthData, predictions
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,35 @@ def save_monthly_data_to_db(process_data):
         except SQLAlchemyError as e:
             session.rollback()
             logger.error(f"Error saving monthly data for {row['usd_price']} on {date}: {e}")
+        finally:
+            session.close()
+    pass
+
+
+def save_prediction_in_db(df):
+    session = init_session()
+    print(df.info())
+    for index, row in df.iterrows():
+        print(row)
+        try:
+            print(row)
+            pre = predictions(
+                coin=row['coin'],
+                date=row['date'],
+                day_pred_1=row['price_t-1'],
+                day_pred_2=row['price_t-2'],
+                day_pred_3=row['price_t-3'],
+                day_pred_4=row['price_t-4'],
+                day_pred_5=row['price_t-5'],
+                day_pred_6=row['price_t-6'],
+                day_pred_7=row['price_t-7'],
+            )
+            session.add(pre)
+            session.commit()
+            logger.info(f"Predicted data for {row['coin']} on {row['date']} saved to the database.")
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error saving predicted data for {row['coin']} on {row['date']}: {e}")
         finally:
             session.close()
     pass

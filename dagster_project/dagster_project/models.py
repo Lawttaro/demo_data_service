@@ -28,3 +28,21 @@ class CoinMonthData(Base):
     __table_args__ = (
         PrimaryKeyConstraint('coin', 'year', 'month', name='coin_month_data_pkey'),
     )
+
+
+class predictions(Base):
+    __tablename__ = 'predictions'
+    
+    coin = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    day_pred_1 = Column(Float)
+    day_pred_2 = Column(Float)
+    day_pred_3 = Column(Float)
+    day_pred_4 = Column(Float)
+    day_pred_5 = Column(Float)
+    day_pred_6 = Column(Float)
+    day_pred_7 = Column(Float)
+    
+    __table_args__ = (
+        PrimaryKeyConstraint('coin', 'date', name='predictions_pkey'),
+    )
